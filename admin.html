@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administración | Jódar Contra el Bullying</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f0fa;margin:0;padding:20px;color:#302344}
+main{max-width:850px;margin:auto}
+section{background:white;padding:22px;margin:15px 0;border-radius:14px;box-shadow:0 2px 10px #ddd}
+h1,h2{color:#7041a1}
+input,textarea,select,button{width:100%;box-sizing:border-box;padding:12px;margin:8px 0;border:1px solid #ccc;border-radius:7px;font-size:16px}
+button{background:#7041a1;color:white;border:0;font-weight:bold;cursor:pointer}
+button:hover{background:#542b80}
+.danger{background:#b52d42}
+.noticia{border-top:1px solid #ddd;padding:12px 0}
+img{max-width:180px;border-radius:8px}
+#panel{display:none}
+</style>
+</head>
+<body>
+<main>
+<section>
+<h1>Jódar Contra el Bullying</h1>
+<p>Panel privado de administración de noticias</p>
+</section>
+
+<section id="login">
+<h2>Acceso de administrador</h2>
+<input id="email" type="email" placeholder="Correo electrónico">
+<input id="password" type="password" placeholder="Contraseña">
+<button onclick="entrar()">Entrar</button>
+<p id="mensaje"></p>
+</section>
+
+<div id="panel">
+<section>
+<h2>Publicar una noticia</h2>
+<input id="titulo" placeholder="Título de la noticia">
+<select id="categoria">
+<option value="Noticias">Noticias</option>
+<option value="Actividades">Actividades</option>
+<option value="Eventos">Eventos</option>
+<option value="Comunicados">Comunicados</option>
+</select>
+<textarea id="contenido" rows="6" placeholder="Escribe aquí la noticia"></textarea>
+<label>Fotografía:</label>
+<input id="foto" type="file" accept="image/jpeg,image/png,image/webp">
+<label><input id="publicada" type="checkbox" checked style="width:auto"> Publicar inmediatamente</label>
+<button onclick="guardar()">Guardar noticia</button>
+<p id="estado"></p>
+</section>
+
+<section>
+<h2>Noticias existentes</h2>
+<div id="lista"></div>
+</section>
+
+<button class="danger" onclick="salir()">Cerrar sesión</button>
+</div>
+</main>
+
+<script>
+const SUPABASE_URL = "https://luojsxiggxoxmejksaks.supabase.co";
+const SUPABASE_KEY = sb_publishable_JpJAb5Q42bEpSOKUG8W6Jg_uRBsWU_x
+const db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let usuario = null;
+
+async function entrar(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ const {data,error}=await db.auth.signInWithPassword({email,password});
+ if(error){document.getElementById("mensaje").textContent="No se ha podido acceder: "+error.message;return;}
+ usuario=data.user;
+ await comprobarAdmin();
+}
+
+async function comprobarAdmin(){
+ const {data,error}=await db.from("admins").select("user_id").eq("user_id",usuario.id).maybeSingle();
+ if(error || !data){
+  await db.auth.signOut();
+  document.getElementById("mensaje").textContent="Esta cuenta no tiene permisos de administrador.";
+  return;
+ }
+ document.getElementById("login").style.display="none";
+ document.getElementById("panel").style.display="block";
+ cargarNoticias();
+}
+
+async function guardar(){
+ const titulo=document.getElementById("titulo").value.trim();
+ const contenido=document.getElementById("contenido").value.trim();
+ const categoria=document.getElementById("categoria").value;
+ const publicada=document.getElementById("publicada").checked;
+ const archivo=document.getElementById("foto").files[0];
+ if(!titulo){alert("Escribe un título.");return;}
+
+ let imagen=null;
+ if(archivo){
+  const extension=archivo.name.split(".").pop().toLowerCase();
+  const ruta=Date.now()+"."+extension;
+  const {error}=await db.storage.from("noticias-fotos").upload(ruta,archivo);
+  if(error){alert("Error al subir la fotografía: "+error.message);return;}
+  imagen=ruta;
+ }
+
+ const {error}=await db.from("noticias").insert({
+  titulo,contenido,categoria,publicada,imagen
+ });
+ if(error){alert("Error al guardar: "+error.message);return;}
+
+ document.getElementById("titulo").value="";
+ document.getElementById("contenido").value="";
+ document.getElementById("foto").value="";
+ document.getElementById("estado").textContent="Noticia guardada correctamente.";
+ cargarNoticias();
+}
+
+async function cargarNoticias(){
+ const {data,error}=await db.from("noticias").select("*").order("fecha_publicacion",{ascending:false});
+ if(error){document.getElementById("lista").textContent="Error: "+error.message;return;}
+ const lista=document.getElementById("lista");
+ lista.innerHTML="";
+ data.forEach(n=>{
+  const div=document.createElement("div");
+  div.className="noticia";
+  const titulo=document.createElement("h3");
+  titulo.textContent=n.titulo;
+  const contenido=document.createElement("p");
+  contenido.textContent=n.contenido||"";
+  const estado=document.createElement("p");
+  estado.textContent=n.publicada?"Publicada":"Borrador";
+  const editar=document.createElement("button");
+  editar.textContent="Editar";
+  editar.onclick=()=>editarNoticia(n);
+  const borrar=document.createElement("button");
+  borrar.textContent="Borrar";
+  borrar.className="danger";
+  borrar.onclick=()=>borrarNoticia(n);
+  div.append(titulo,contenido,estado,editar,borrar);
+  lista.appendChild(div);
+ });
+}
+
+async function editarNoticia(n){
+ const titulo=prompt("Nuevo título:",n.titulo);
+ if(titulo===null)return;
+ const contenido=prompt("Nuevo contenido:",n.contenido||"");
+ if(contenido===null)return;
+ const {error}=await db.from("noticias").update({titulo,contenido}).eq("id",n.id);
+ if(error)alert(error.message);
+ else cargarNoticias();
+}
+
+async function borrarNoticia(n){
+ if(!confirm("¿Seguro que quieres borrar esta noticia?"))return;
+ const {error}=await db.from("noticias").delete().eq("id",n.id);
+ if(error)alert(error.message);
+ else cargarNoticias();
+}
+
+async function salir(){
+ await db.auth.signOut();
+ location.reload();
+}
+
+db.auth.getSession().then(async({data})=>{
+ if(data.session){
+  usuario=data.session.user;
+  await comprobarAdmin();
+ }
+});
+</script>
+</body>
+</html>
