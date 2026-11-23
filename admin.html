@@ -33,7 +33,13 @@ img{max-width:180px;border-radius:8px}
 <button onclick="entrar()">Entrar</button>
 <p id="mensaje"></p>
 </section>
-
+<section id="recuperar" style="display:none">
+<h2>Crear nueva contraseña</h2>
+<input id="nuevaPassword" type="password" placeholder="Nueva contraseña">
+<input id="confirmarPassword" type="password" placeholder="Repite la contraseña">
+<button onclick="cambiarPassword()">Guardar nueva contraseña</button>
+<p id="mensajeRecuperacion"></p>
+</section>
 <div id="panel">
 <section>
 <h2>Publicar una noticia</h2>
@@ -165,7 +171,36 @@ async function salir(){
  await db.auth.signOut();
  location.reload();
 }
+async function cambiarPassword(){
+ const nueva=document.getElementById("nuevaPassword").value;
+ const confirmar=document.getElementById("confirmarPassword").value;
+ const mensaje=document.getElementById("mensajeRecuperacion");
 
+ if(nueva.length<8){
+  mensaje.textContent="La contraseña debe tener al menos 8 caracteres";
+  return;
+ }
+
+ if(nueva!==confirmar){
+  mensaje.textContent="Las contraseñas no coinciden";
+  return;
+ }
+
+ const {error}=await db.auth.updateUser({password:nueva});
+
+ if(error){
+  mensaje.textContent=error.message;
+ }else{
+  mensaje.textContent="Contraseña actualizada correctamente";
+ }
+}
+ db.auth.onAuthStateChange((evento, sesion) => {
+ if(evento === "PASSWORD_RECOVERY"){
+  document.getElementById("login").style.display="none";
+  document.getElementById("panel").style.display="none";
+  document.getElementById("recuperar").style.display="block";
+ }
+});
 db.auth.getSession().then(async({data})=>{
  if(data.session){
   usuario=data.session.user;
